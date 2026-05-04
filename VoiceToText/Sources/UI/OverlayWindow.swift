@@ -4,7 +4,7 @@ import SwiftUI
 class OverlayWindow: NSWindow {
     init(appState: AppState) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 260),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 180),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -16,29 +16,35 @@ class OverlayWindow: NSWindow {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isMovableByWindowBackground = true
         hasShadow = true
+        // Не перехватываем фокус — курсор остаётся в нужном поле
+        hidesOnDeactivate = false
 
         let view = OverlayView(appState: appState, onClose: { [weak self] in
             self?.hide()
         })
         contentView = NSHostingView(rootView: view)
 
-        center()
-        // Сдвигаем немного выше центра экрана — как у SuperWhisper
-        if let screen = NSScreen.main {
-            let x = (screen.frame.width - 420) / 2
-            let y = screen.frame.height * 0.62
-            setFrameOrigin(NSPoint(x: x, y: y))
-        }
+        positionNearTop()
+    }
+
+    private func positionNearTop() {
+        guard let screen = NSScreen.main else { return }
+        let x = (screen.frame.width - 440) / 2
+        let y = screen.frame.height * 0.68
+        setFrameOrigin(NSPoint(x: x, y: y))
     }
 
     func show() {
-        makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        if !isVisible {
+            positionNearTop()
+        }
+        orderFrontRegardless() // показываем без перехвата фокуса
     }
 
     func hide() {
         orderOut(nil)
     }
 
-    override var canBecomeKey: Bool { true }
+    override var canBecomeKey: Bool { false }  // не крадём фокус
+    override var canBecomeMain: Bool { false }
 }
