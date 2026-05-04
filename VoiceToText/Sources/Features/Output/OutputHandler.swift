@@ -3,25 +3,28 @@ import AppKit
 class OutputHandler {
     static let shared = OutputHandler()
 
-    // Запомнить приложение с фокусом перед началом записи
-    private var targetApp: NSRunningApplication?
+    private var targetAppName: String?
+    private var targetAppBundleId: String?
 
     func rememberFocusedApp() {
-        targetApp = NSWorkspace.shared.frontmostApplication
+        let app = NSWorkspace.shared.frontmostApplication
+        targetAppName = app?.localizedName
+        targetAppBundleId = app?.bundleIdentifier
+        print("[OutputHandler] запомнено приложение: \(targetAppName ?? "nil")")
     }
 
     func send(text: String) {
         copyToClipboard(text: text)
 
-        guard let app = targetApp else {
-            pasteViaAppleScript()
+        guard let appName = targetAppName else {
+            print("[OutputHandler] нет сохранённого приложения, вставляем как есть")
+            pasteViaAppleScript(appName: nil)
             return
         }
 
-        // Активируем нужное приложение, затем вставляем
-        app.activate(options: .activateIgnoringOtherApps)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            self.pasteViaAppleScript()
+        // AppleScript: активировать нужное приложение и вставить
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.pasteViaAppleScript(appName: appName)
         }
     }
 
@@ -30,12 +33,25 @@ class OutputHandler {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
-    private func pasteViaAppleScript() {
-        let script = "tell application \"System Events\" to keystroke \"v\" using command down"
+    private func pasteViaAppleScript(appName: String?) {
+        let script: String
+        if let name = appName {
+            // Активируем конкретное приложение и вставляем в него
+            script = """
+            tell application "\(name)" to activate
+            delay 0.1
+            tell application "System Events"
+                keystroke "v" using command down
+            end tell
+            """
+        } else {
+            script = "tell application \"System Events\" to keystroke \"v\" using command down"
+        }
+
         var error: NSDictionary?
         NSAppleScript(source: script)?.executeAndReturnError(&error)
         if let err = error {
-            print("Ошибка вставки: \(err)")
+            print("[OutputHandler] ошибка вставки: \(err)")
         }
     }
 }
