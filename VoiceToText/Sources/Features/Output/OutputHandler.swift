@@ -5,7 +5,8 @@ class OutputHandler {
 
     func send(text: String) {
         copyToClipboard(text: text)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        // Задержка: дать время overlay спрятаться и фокусу вернуться в нужное поле
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             self.paste()
         }
     }
@@ -16,13 +17,12 @@ class OutputHandler {
     }
 
     private func paste() {
-        let src = CGEventSource(stateID: .hidSystemState)
-        // Cmd+V
-        let keyDown = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: true)
-        let keyUp   = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: false)
-        keyDown?.flags = .maskCommand
-        keyUp?.flags   = .maskCommand
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
+        // AppleScript — надёжнее CGEvent, работает во всех приложениях
+        let script = "tell application \"System Events\" to keystroke \"v\" using command down"
+        var error: NSDictionary?
+        NSAppleScript(source: script)?.executeAndReturnError(&error)
+        if let err = error {
+            print("Ошибка вставки: \(err)")
+        }
     }
 }

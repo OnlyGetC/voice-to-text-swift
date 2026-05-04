@@ -45,7 +45,13 @@ class Transcriber {
     func transcribe(audio: [Float]) async -> String? {
         guard let whisperKit else { return nil }
         do {
-            let results = try await whisperKit.transcribe(audioArray: audio)
+            // language: "ru" — транскрибация на русском без перевода
+            // task: .transcribe — только транскрибация, не перевод
+            var options = DecodingOptions()
+            options.language = "ru"
+            options.task = .transcribe
+
+            let results = try await whisperKit.transcribe(audioArray: audio, decodeOptions: options)
             return results.map { $0.text }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
         } catch {
             print("Ошибка транскрибации: \(error)")
