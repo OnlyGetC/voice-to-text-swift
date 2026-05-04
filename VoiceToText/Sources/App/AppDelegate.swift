@@ -4,6 +4,7 @@ import SwiftUI
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var overlayWindow: OverlayWindow?
+    var settingsWindow: NSWindow?
     let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -11,7 +12,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupOverlayWindow()
         setupHotkeys()
 
-        // Загружаем модель при старте
         Task {
             await appState.transcriber.loadModel()
         }
@@ -27,6 +27,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Показать", action: #selector(showOverlay), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Режим: PTT / VAD", action: #selector(toggleVAD), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Настройки...", action: #selector(showSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Выйти", action: #selector(quit), keyEquivalent: "q"))
         statusItem.menu = menu
@@ -52,6 +54,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showOverlay() {
         overlayWindow?.show()
+    }
+
+    // MARK: - Settings Window
+
+    @objc func showSettings() {
+        if let existing = settingsWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let view = SettingsView(hotkeys: HotkeyManager.shared, onClose: { [weak self] in
+            self?.settingsWindow?.orderOut(nil)
+        })
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 240),
+            styleMask: [.borderless, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.level = .floating
+        window.isMovableByWindowBackground = true
+        window.hasShadow = true
+        window.contentView = NSHostingView(rootView: view)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow = window
     }
 
     // MARK: - Hotkeys
