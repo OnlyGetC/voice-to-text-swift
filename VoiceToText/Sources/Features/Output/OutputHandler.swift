@@ -4,27 +4,38 @@ class OutputHandler {
     static let shared = OutputHandler()
 
     private var targetAppName: String?
-    private var targetAppBundleId: String?
+
+    // Путь к paste_helper.py рядом с .app bundle
+    private var pasteHelperPath: String {
+        let bundlePath = Bundle.main.bundlePath
+        // dist/VoiceToText.app -> dist/paste_helper.py
+        let dir = URL(fileURLWithPath: bundlePath)
+            .deletingLastPathComponent()
+        return dir.appendingPathComponent("paste_helper.py").path
+    }
 
     func rememberFocusedApp() {
         let app = NSWorkspace.shared.frontmostApplication
         targetAppName = app?.localizedName
-        targetAppBundleId = app?.bundleIdentifier
-        print("[OutputHandler] запомнено приложение: \(targetAppName ?? "nil")")
     }
 
     func send(text: String) {
         copyToClipboard(text: text)
 
-        guard let appName = targetAppName else {
-            print("[OutputHandler] нет сохранённого приложения, вставляем как есть")
-            pasteViaAppleScript(appName: nil)
-            return
-        }
+        let appName = targetAppName
 
-        // AppleScript: активировать нужное приложение и вставить
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.pasteViaAppleScript(appName: appName)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            // Сначала активируем нужное приложение
+            if let name = appName {
+                let activateScript = "tell application \"\(name)\" to activate"
+                var err: NSDictionary?
+                NSAppleScript(source: activateScript)?.executeAndReturnError(&err)
+            }
+
+            // Небольшая пауза чтобы приложение получило фокус
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                self.pasteViaPython()
+            }
         }
     }
 
@@ -33,25 +44,25 @@ class OutputHandler {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
-    private func pasteViaAppleScript(appName: String?) {
-        let script: String
-        if let name = appName {
-            // Активируем конкретное приложение и вставляем в него
-            script = """
-            tell application "\(name)" to activate
-            delay 0.1
-            tell application "System Events"
-                keystroke "v" using command down
-            end tell
-            """
-        } else {
-            script = "tell application \"System Events\" to keystroke \"v\" using command down"
+    private func pasteViaPython() {
+        let helper = pasteHelperPath
+        let python = "/usr/bin/python3"
+
+        // Проверяем есть ли скрипт рядом с .app
+        if FileManager.default.fileExists(atPath: helper) {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: python)
+            task.arguments = [helper]
+            try? task.run()
+            return
         }
 
-        var error: NSDictionary?
-        NSAppleScript(source: script)?.executeAndReturnError(&error)
-        if let err = error {
-            print("[OutputHandler] ошибка вставки: \(err)")
+        // Fallback: AppleScript
+        let script = "tell application \"System Events\" to keystroke \"v\" using command down"
+        var err: NSDictionary?
+        NSAppleScript(source: script)?.executeAndReturnError(&err)
+        if let e = err {
+            print("[OutputHandler] ошибка вставки: \(e)")
         }
     }
 }
