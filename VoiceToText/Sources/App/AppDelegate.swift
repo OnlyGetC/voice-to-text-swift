@@ -69,7 +69,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         })
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 240),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 240),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -105,6 +105,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func startRecording() {
         guard appState.modelReady else { return }
+        // Запомнить приложение с фокусом ДО показа overlay
+        OutputHandler.shared.rememberFocusedApp()
         appState.isRecording = true
         updateStatusIcon()
         overlayWindow?.show()
@@ -141,6 +143,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func toggleVAD() {
         appState.isVADMode.toggle()
         if appState.isVADMode {
+            // Запомнить приложение при включении VAD
+            OutputHandler.shared.rememberFocusedApp()
             appState.recorder.startVAD { [weak self] audio in
                 self?.transcribe(audio: audio)
             }
