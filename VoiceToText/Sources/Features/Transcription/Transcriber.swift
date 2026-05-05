@@ -42,14 +42,18 @@ class Transcriber {
         }
     }
 
-    func transcribe(audio: [Float]) async -> String? {
+    func transcribe(audio: [Float], language: String = "ru", prompt: String? = nil) async -> String? {
         guard let whisperKit else { return nil }
         do {
-            // language: "ru" — транскрибация на русском без перевода
-            // task: .transcribe — только транскрибация, не перевод
             var options = DecodingOptions()
-            options.language = "ru"
+            // "auto" — не указываем язык, Whisper определит сам
+            if language != "auto" {
+                options.language = language
+            }
             options.task = .transcribe
+            if let prompt, !prompt.isEmpty {
+                options.promptTokens = whisperKit.tokenizer?.encode(text: " \(prompt)") ?? []
+            }
 
             let results = try await whisperKit.transcribe(audioArray: audio, decodeOptions: options)
             return results.map { $0.text }.joined(separator: " ").trimmingCharacters(in: .whitespaces)

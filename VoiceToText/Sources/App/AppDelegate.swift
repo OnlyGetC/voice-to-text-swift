@@ -64,12 +64,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let view = SettingsView(hotkeys: HotkeyManager.shared, onClose: { [weak self] in
+        let view = SettingsView(hotkeys: HotkeyManager.shared, appState: appState, onClose: { [weak self] in
             self?.settingsWindow?.orderOut(nil)
         })
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 240),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 460),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -125,8 +125,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func transcribe(audio: [Float]) {
         appState.isTranscribing = true
         updateStatusIcon()
+        let language = appState.transcriptionLanguage
+        let prompt = appState.promptEnabled ? appState.transcriptionPrompt : nil
         Task {
-            let result = await appState.transcriber.transcribe(audio: audio)
+            let result = await appState.transcriber.transcribe(audio: audio, language: language, prompt: prompt)
             await MainActor.run {
                 appState.isTranscribing = false
                 self.updateStatusIcon()
