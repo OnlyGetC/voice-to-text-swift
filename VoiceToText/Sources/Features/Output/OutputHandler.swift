@@ -5,33 +5,42 @@ class OutputHandler {
     static let shared = OutputHandler()
 
     private var targetApp: NSRunningApplication?
+    private var previousApp: NSRunningApplication?
+    private var observer: NSObjectProtocol?
+
+    private init() {
+        observer = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let self else { return }
+            let activated = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let myBundle = Bundle.main.bundleIdentifier
+            if activated?.bundleIdentifier != myBundle {
+                self.previousApp = activated
+            }
+        }
+    }
 
     func rememberFocusedApp() {
-        targetApp = NSWorkspace.shared.frontmostApplication
+        // Используем предыдущее приложение — к моменту вызова фокус уже у нас
+        targetApp = previousApp ?? NSWorkspace.shared.frontmostApplication
     }
 
     func send(text: String) {
-        // Сохранить текущий буфер обмена
-        let previousItems = NSPasteboard.general.pasteboardItems?.compactMap { item -> (types: [NSPasteboard.PasteboardType], data: [(NSPasteboard.PasteboardType, Data)])? in
-            let types = item.types
-            let data = types.compactMap { type -> (NSPasteboard.PasteboardType, Data)? in
-                guard let d = item.data(forType: type) else { return nil }
-                return (type, d)
-            }
-            return (types: types, data: data)
-        }
-
+        let previousString = NSPasteboard.general.string(forType: .string)
         copyToClipboard(text)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.targetApp?.activate(options: .activateIgnoringOtherApps)
+        // Активация и вставка — через AppleScript, без дополнительных задержек
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            self.sendCmdV()
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                self.sendCmdV()
-
-                // Восстановить буфер обмена через небольшую паузу
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self.restoreClipboard(previousItems)
+            // Восстановить буфер обмена после вставки
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                if let prev = previousString {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(prev, forType: .string)
                 }
             }
         }
@@ -42,30 +51,20 @@ class OutputHandler {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
-    private func restoreClipboard(_ items: [(types: [NSPasteboard.PasteboardType], data: [(NSPasteboard.PasteboardType, Data)])]?) {
-        guard let items, !items.isEmpty else {
-            NSPasteboard.general.clearContents()
-            return
-        }
-        NSPasteboard.general.clearContents()
-        for item in items {
-            let pbItem = NSPasteboardItem()
-            for (type, data) in item.data {
-                pbItem.setData(data, forType: type)
-            }
-            NSPasteboard.general.writeObjects([pbItem])
-        }
-    }
-
     private func sendCmdV() {
-        let src = CGEventSource(stateID: .combinedSessionState)
+        guard let app = targetApp else { return }
 
-        let keyDown = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: true)!
-        let keyUp   = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: false)!
-        keyDown.flags = .maskCommand
-        keyUp.flags   = .maskCommand
+        let pid = app.processIdentifier
+        app.activate(options: .activateIgnoringOtherApps)
 
-        keyDown.post(tap: .cgAnnotatedSessionEventTap)
-        keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            let src = CGEventSource(stateID: .combinedSessionState)
+            guard let keyDown = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: true),
+                  let keyUp   = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: false) else { return }
+            keyDown.flags = .maskCommand
+            keyUp.flags   = .maskCommand
+            keyDown.postToPid(pid)
+            keyUp.postToPid(pid)
+        }
     }
 }
