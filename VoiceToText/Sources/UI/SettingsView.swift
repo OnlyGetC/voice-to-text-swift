@@ -531,6 +531,7 @@ struct SettingsView: View {
 
     // MARK: Коррекция
 
+    @ObservedObject private var ollamaManager = OllamaManager.shared
     @State private var correctionApiKeyInput: String = ""
     @State private var showCorrectionApiKey: Bool = false
 
@@ -540,9 +541,9 @@ struct SettingsView: View {
 
             // Выбор режима
             VStack(spacing: 6) {
-                ForEach(CorrectionMode.allCases, id: \.rawValue) { mode in
-                    correctionModeRow(mode)
-                }
+                correctionModeRow(.off)
+                correctionModeRow(.ollama)
+                correctionModeRow(.api)
             }
 
             if appState.correctionMode != .off {
@@ -559,7 +560,7 @@ struct SettingsView: View {
                 apiCorrectionSection
             }
 
-            // Поле промта (для ollama и api)
+            // Поле промта
             if appState.correctionMode != .off {
                 Divider().background(Color.white.opacity(0.08))
                 correctionPromptSection
@@ -596,26 +597,162 @@ struct SettingsView: View {
     private func correctionModeDescription(_ mode: CorrectionMode) -> String {
         switch mode {
         case .off:    return "Текст вставляется как есть после транскрибации"
-        case .ollama: return "Требует установленный Ollama (ollama.com). Нагружает RAM, добавляет ~1–3 сек"
-        case .api:    return "Требует интернет и API-ключ. Быстро, может работать нестабильно"
+        case .ollama: return "Локально, без интернета. Добавляет ~1–3 сек, нагружает RAM"
+        case .api:    return "Требует интернет и API-ключ. Быстро, но зависит от сети"
         }
     }
 
     private var ollamaCorrectionSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Модель Ollama")
-                    .font(.system(size: 11, design: .rounded)).foregroundColor(.white.opacity(0.4))
-                InfoButton(text: "Введите название модели Ollama. Например: llama3.2, gemma2, qwen2.5. Модель должна быть загружена через «ollama pull <модель>».")
+        VStack(alignment: .leading, spacing: 12) {
+
+            // Статус установки + ползунок
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text("Ollama")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.85))
+                        Text("• \(ollamaStatusLabel)")
+                            .font(.system(size: 11, design: .rounded))
+                            .foregroundColor(ollamaStatusColor)
+                    }
+                    Text("Модель: \(OllamaManager.defaultModel) (~1.3 ГБ)")
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundColor(.white.opacity(0.3))
+                }
+                Spacer()
+
+                // Ползунок включения (только если установлена)
+                if ollamaManager.isInstalled {
+                    Toggle("", isOn: $ollamaManager.enabled)
+                        .toggleStyle(.switch)
+                        .scaleEffect(0.85)
+                        .tint(.blue)
+                        .disabled(isOllamaToggleDisabled)
+                }
             }
-            TextField("llama3.2", text: $appState.correctionOllamaModel)
-                .font(.system(size: 12, design: .monospaced)).foregroundColor(.white.opacity(0.8))
-                .textFieldStyle(.plain).padding(.horizontal, 10).padding(.vertical, 7)
-                .background(Color.white.opacity(0.05)).cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.1), lineWidth: 1))
-                .colorScheme(.dark)
-            Text("Убедитесь, что Ollama запущен: ollama serve")
-                .font(.system(size: 10, design: .rounded)).foregroundColor(.orange.opacity(0.5))
+
+            // Кнопка установки / прогресс
+            switch ollamaManager.installStatus {
+            case .notInstalled:
+                Button(action: { Task { await ollamaManager.install() } }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.system(size: 13))
+                        Text("Установить Ollama")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Color.blue.opacity(0.3))
+                    .cornerRadius(9)
+                    .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.blue.opacity(0.5), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+
+            case .installing(let progress, let label):
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(label)
+                            .font(.system(size: 11, design: .rounded))
+                            .foregroundColor(.white.opacity(0.5))
+                        Spacer()
+                        Text("\(Int(progress * 100))%")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                    ProgressView(value: progress).tint(.blue)
+                }
+
+            case .installed:
+                // Прогресс скачивания модели
+                switch ollamaManager.modelStatus {
+                case .notPulled:
+                    if case .running = ollamaManager.serverStatus {
+                        Button(action: { Task { await ollamaManager.pullModel() } }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.down.circle")
+                                    .font(.system(size: 13))
+                                Text("Скачать модель (\(OllamaManager.defaultModel))")
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            .background(Color.blue.opacity(0.3))
+                            .cornerRadius(9)
+                            .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.blue.opacity(0.5), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                case .pulling(let progress):
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("Загрузка модели...")
+                                .font(.system(size: 11, design: .rounded))
+                                .foregroundColor(.white.opacity(0.5))
+                            Spacer()
+                            Text("\(Int(progress * 100))%")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.4))
+                        }
+                        ProgressView(value: progress).tint(.blue)
+                    }
+                case .ready:
+                    EmptyView()
+                case .error(let msg):
+                    Text("Ошибка модели: \(msg)")
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundColor(.red.opacity(0.7))
+                }
+
+            case .error(let msg):
+                Text("Ошибка установки: \(msg)")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundColor(.red.opacity(0.7))
+            }
+        }
+    }
+
+    private var ollamaStatusLabel: String {
+        switch ollamaManager.installStatus {
+        case .notInstalled:        return "не установлена"
+        case .installing:          return "установка..."
+        case .error:               return "ошибка установки"
+        case .installed:
+            switch ollamaManager.serverStatus {
+            case .stopped:         return "остановлен"
+            case .starting:        return "запускается..."
+            case .stopping:        return "останавливается..."
+            case .error:           return "ошибка сервера"
+            case .running:
+                switch ollamaManager.modelStatus {
+                case .ready:       return "готово"
+                case .pulling:     return "загрузка модели..."
+                case .notPulled:   return "модель не скачана"
+                case .error:       return "ошибка модели"
+                }
+            }
+        }
+    }
+
+    private var ollamaStatusColor: Color {
+        switch ollamaManager.installStatus {
+        case .notInstalled: return .white.opacity(0.3)
+        case .installing:   return .orange.opacity(0.7)
+        case .error:        return .red.opacity(0.7)
+        case .installed:
+            if case .running = ollamaManager.serverStatus,
+               case .ready = ollamaManager.modelStatus { return .green.opacity(0.7) }
+            if case .stopped = ollamaManager.serverStatus { return .white.opacity(0.3) }
+            if case .error = ollamaManager.serverStatus { return .red.opacity(0.7) }
+            return .orange.opacity(0.7)
+        }
+    }
+
+    private var isOllamaToggleDisabled: Bool {
+        switch ollamaManager.serverStatus {
+        case .starting, .stopping: return true
+        default: return false
         }
     }
 
@@ -738,6 +875,8 @@ struct InfoButton: View {
             Text(text)
                 .font(.system(size: 12, design: .rounded))
                 .foregroundColor(.white.opacity(0.8))
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(14)
                 .frame(maxWidth: 260)
                 .background(Color.black.opacity(0.9))
