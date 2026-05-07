@@ -2,9 +2,12 @@ import AppKit
 import SwiftUI
 
 class OverlayWindow: NSWindow {
-    init(appState: AppState) {
+    private let pillWidth: CGFloat = 340
+    private let bottomMargin: CGFloat = 80
+
+    init(appState: AppState, onSettings: @escaping () -> Void, onHistory: @escaping () -> Void) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 180),
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 90),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -16,35 +19,37 @@ class OverlayWindow: NSWindow {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isMovableByWindowBackground = true
         hasShadow = true
-        // Не перехватываем фокус — курсор остаётся в нужном поле
         hidesOnDeactivate = false
 
-        let view = OverlayView(appState: appState, onClose: { [weak self] in
-            self?.hide()
-        })
+        let view = OverlayView(
+            appState: appState,
+            onClose: { [weak self] in self?.hide() },
+            onSettings: onSettings,
+            onHistory: onHistory
+        )
         contentView = NSHostingView(rootView: view)
 
-        positionNearTop()
+        positionAtBottom()
     }
 
-    private func positionNearTop() {
+    private func positionAtBottom() {
         guard let screen = NSScreen.main else { return }
-        let x = (screen.frame.width - 440) / 2
-        let y = screen.frame.height * 0.68
+        let x = (screen.frame.width - pillWidth) / 2
+        let y = screen.visibleFrame.minY + bottomMargin
         setFrameOrigin(NSPoint(x: x, y: y))
     }
 
     func show() {
         if !isVisible {
-            positionNearTop()
+            positionAtBottom()
         }
-        orderFrontRegardless() // показываем без перехвата фокуса
+        orderFrontRegardless()
     }
 
     func hide() {
         orderOut(nil)
     }
 
-    override var canBecomeKey: Bool { false }  // не крадём фокус
+    override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }

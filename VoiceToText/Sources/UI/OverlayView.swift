@@ -4,87 +4,97 @@ import AppKit
 struct OverlayView: View {
     @ObservedObject var appState: AppState
     var onClose: () -> Void
+    var onSettings: () -> Void
+    var onHistory: () -> Void
 
     @State private var copied = false
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.black.opacity(0.85))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(borderColor.opacity(0.25), lineWidth: 1.2)
-                )
+            // Blur background
+            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            // Subtle overlay tint
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.black.opacity(0.35))
+
+            // Border
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(borderColor.opacity(0.18), lineWidth: 1)
 
             VStack(spacing: 0) {
                 topBar
-                    .padding(.horizontal, 18)
-                    .padding(.top, 16)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 12)
 
                 if appState.modelLoading {
                     loadingArea
-                        .padding(.horizontal, 18)
-                        .padding(.top, 12)
-                        .padding(.bottom, 18)
+                        .padding(.horizontal, 14)
+                        .padding(.top, 8)
+                        .padding(.bottom, 14)
                 } else {
                     contentArea
-                        .padding(.horizontal, 18)
-                        .padding(.top, 10)
-                        .padding(.bottom, 16)
+                        .padding(.horizontal, 14)
+                        .padding(.top, 8)
+                        .padding(.bottom, 12)
                 }
             }
         }
-        .frame(width: 440, height: contentHeight)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: appState.isRecording)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: appState.isTranscribing)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: appState.lastText)
-        .shadow(color: .black.opacity(0.45), radius: 32, x: 0, y: 12)
+        .frame(width: pillWidth, height: contentHeight)
+        .shadow(color: .black.opacity(0.4), radius: 24, x: 0, y: 8)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: appState.isRecording)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: appState.isTranscribing)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: appState.lastText)
     }
 
     // MARK: - Layout
 
+    private var pillWidth: CGFloat { 340 }
+
     private var contentHeight: CGFloat {
-        if appState.modelLoading  { return 180 }
-        if appState.isRecording   { return 180 }
-        if appState.isTranscribing { return 160 }
-        if !appState.lastText.isEmpty { return 200 }
-        return 160
+        if appState.modelLoading      { return 140 }
+        if appState.isRecording       { return 120 }
+        if appState.isTranscribing    { return 100 }
+        if !appState.lastText.isEmpty { return 160 }
+        return 90
     }
 
     // MARK: - Top Bar
 
     private var topBar: some View {
-        HStack(spacing: 8) {
-            // Индикатор статуса
-            ZStack {
-                Circle()
-                    .fill(statusColor.opacity(0.2))
-                    .frame(width: 22, height: 22)
-                    .scaleEffect(appState.isRecording ? 1.3 : 1.0)
-                    .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: appState.isRecording)
-
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 9, height: 9)
-            }
+        HStack(spacing: 6) {
+            // Статус-точка
+            Circle()
+                .fill(statusColor)
+                .frame(width: 7, height: 7)
+                .scaleEffect(appState.isRecording ? 1.2 : 1.0)
+                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: appState.isRecording)
 
             Text(statusText)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundColor(.white.opacity(0.8))
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundColor(.white.opacity(0.75))
 
             Spacer()
 
-            closeButton
+            // История
+            iconButton(systemName: "clock", action: onHistory)
+
+            // Настройки
+            iconButton(systemName: "gearshape", action: onSettings)
+
+            // Закрыть
+            iconButton(systemName: "xmark", action: onClose)
         }
     }
 
-    private var closeButton: some View {
-        Button(action: onClose) {
-            Image(systemName: "xmark")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(.white.opacity(0.35))
-                .frame(width: 22, height: 22)
-                .background(Color.white.opacity(0.07))
+    private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.white.opacity(0.4))
+                .frame(width: 20, height: 20)
+                .background(Color.white.opacity(0.06))
                 .clipShape(Circle())
         }
         .buttonStyle(.plain)
@@ -105,160 +115,116 @@ struct OverlayView: View {
         }
     }
 
-    // Запись идёт — волна
     private var recordingArea: some View {
-        VStack(spacing: 10) {
-            WaveformView(level: appState.audioLevel, isRecording: true)
-                .frame(height: 64)
-
-            Text("Говорите... отпустите клавишу для завершения")
-                .font(.system(size: 12, design: .rounded))
-                .foregroundColor(.white.opacity(0.35))
-        }
-        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+        WaveformView(level: appState.audioLevel, isRecording: true)
+            .frame(height: 44)
+            .transition(.opacity.combined(with: .scale(scale: 0.97)))
     }
 
-    // Обработка — пульсирующие точки
     private var transcribingArea: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 8) {
-                ForEach(0..<4, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.white.opacity(0.4))
-                        .frame(width: 4, height: CGFloat.random(in: 12...36))
-                        .animation(
-                            .easeInOut(duration: 0.4)
-                                .repeatForever(autoreverses: true)
-                                .delay(Double(i) * 0.1),
-                            value: appState.isTranscribing
-                        )
-                }
-            }
-            .frame(height: 40)
-
-            Text("Распознавание речи...")
+        HStack(spacing: 10) {
+            ProgressView()
+                .progressViewStyle(.circular)
+                .scaleEffect(0.65)
+                .tint(.white.opacity(0.5))
+            Text("Распознавание...")
                 .font(.system(size: 12, design: .rounded))
-                .foregroundColor(.white.opacity(0.4))
+                .foregroundColor(.white.opacity(0.45))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .transition(.opacity)
     }
 
-    // Результат — текст + кнопки
     private var resultArea: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Разделитель
+        VStack(alignment: .leading, spacing: 8) {
             Rectangle()
                 .fill(Color.white.opacity(0.06))
                 .frame(height: 1)
 
-            // Текст результата
             Text(appState.lastText)
-                .font(.system(size: 15, weight: .regular, design: .rounded))
-                .foregroundColor(.white.opacity(0.92))
-                .lineLimit(4)
+                .font(.system(size: 13, weight: .regular, design: .rounded))
+                .foregroundColor(.white.opacity(0.88))
+                .lineLimit(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
 
-            // Кнопки
-            HStack(spacing: 8) {
-                // Копировать
+            HStack {
                 Button(action: copyText) {
-                    HStack(spacing: 5) {
+                    HStack(spacing: 4) {
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 10))
                         Text(copied ? "Скопировано" : "Копировать")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
                     }
-                    .foregroundColor(copied ? .green : .white.opacity(0.7))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(copied ? Color.green.opacity(0.15) : Color.white.opacity(0.08))
-                    )
+                    .foregroundColor(copied ? .green : .white.opacity(0.55))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(copied ? Color.green.opacity(0.12) : Color.white.opacity(0.07)))
                 }
                 .buttonStyle(.plain)
-                .animation(.easeInOut(duration: 0.2), value: copied)
+                .animation(.easeInOut(duration: 0.15), value: copied)
 
                 Spacer()
 
-                Text("Вставлено автоматически")
-                    .font(.system(size: 11, design: .rounded))
-                    .foregroundColor(.white.opacity(0.2))
+                Text("вставлено")
+                    .font(.system(size: 10, design: .rounded))
+                    .foregroundColor(.white.opacity(0.18))
             }
         }
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
-    // Ожидание
     private var idleArea: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "mic")
-                .font(.system(size: 24, weight: .thin))
-                .foregroundColor(.white.opacity(0.15))
-
-            Text(idleHint)
-                .font(.system(size: 12, design: .rounded))
-                .foregroundColor(.white.opacity(0.25))
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 8)
-        .transition(.opacity)
+        Text(idleHint)
+            .font(.system(size: 11, design: .rounded))
+            .foregroundColor(.white.opacity(0.3))
+            .frame(maxWidth: .infinity, alignment: .center)
+            .transition(.opacity)
     }
 
     // MARK: - Loading
 
     private var loadingArea: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 10) {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
                 ProgressView()
                     .progressViewStyle(.circular)
-                    .scaleEffect(0.75)
+                    .scaleEffect(0.65)
                     .tint(.white.opacity(0.5))
-
                 Text(appState.modelProgressLabel.isEmpty ? "Загрузка модели..." : appState.modelProgressLabel)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundColor(.white.opacity(0.6))
-
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.55))
                 Spacer()
-
                 Text("\(Int(appState.modelProgress * 100))%")
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.4))
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.35))
             }
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.07)).frame(height: 4)
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(LinearGradient(colors: [.white.opacity(0.4), .white.opacity(0.85)], startPoint: .leading, endPoint: .trailing))
-                        .frame(width: geo.size.width * CGFloat(appState.modelProgress), height: 4)
+                    RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.07)).frame(height: 3)
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(LinearGradient(colors: [.white.opacity(0.3), .white.opacity(0.7)], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: geo.size.width * CGFloat(appState.modelProgress), height: 3)
                         .animation(.easeInOut(duration: 0.3), value: appState.modelProgress)
                 }
             }
-            .frame(height: 4)
-
-            Text("Первый запуск: загрузка модели с HuggingFace (~500 МБ)")
-                .font(.system(size: 11, design: .rounded))
-                .foregroundColor(.white.opacity(0.2))
-                .multilineTextAlignment(.center)
+            .frame(height: 3)
         }
     }
 
     // MARK: - Helpers
 
     private var statusColor: Color {
-        if appState.isRecording    { return .red    }
-        if appState.isTranscribing { return .orange }
-        if appState.modelLoading   { return .yellow }
+        if appState.isRecording       { return .red }
+        if appState.isTranscribing    { return .orange }
+        if appState.modelLoading      { return .yellow }
         if !appState.lastText.isEmpty { return Color(red: 0.3, green: 0.85, blue: 0.5) }
-        return .white.opacity(0.4)
+        return Color.white.opacity(0.3)
     }
 
     private var borderColor: Color {
-        if appState.isRecording    { return .red    }
+        if appState.isRecording    { return .red }
         if appState.isTranscribing { return .orange }
         return .white
     }
@@ -282,5 +248,25 @@ struct OverlayView: View {
         NSPasteboard.general.setString(appState.lastText, forType: .string)
         copied = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
+    }
+}
+
+// MARK: - NSVisualEffectView wrapper
+
+struct VisualEffectBlur: NSViewRepresentable {
+    var material: NSVisualEffectView.Material
+    var blendingMode: NSVisualEffectView.BlendingMode
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let v = NSVisualEffectView()
+        v.material = material
+        v.blendingMode = blendingMode
+        v.state = .active
+        return v
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
     }
 }

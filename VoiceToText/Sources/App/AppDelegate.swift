@@ -5,6 +5,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var overlayWindow: OverlayWindow?
     var settingsWindow: NSWindow?
+    var historyWindow: NSWindow?
     let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -49,7 +50,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Overlay Window
 
     private func setupOverlayWindow() {
-        overlayWindow = OverlayWindow(appState: appState)
+        overlayWindow = OverlayWindow(
+            appState: appState,
+            onSettings: { [weak self] in self?.showSettings() },
+            onHistory: { [weak self] in self?.showHistory() }
+        )
     }
 
     @objc func showOverlay() {
@@ -84,6 +89,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow = window
+    }
+
+    // MARK: - History Window
+
+    func showHistory() {
+        if let existing = historyWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let view = HistoryView(appState: appState, onClose: { [weak self] in
+            self?.historyWindow?.orderOut(nil)
+        })
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 420),
+            styleMask: [.borderless, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.level = .floating
+        window.isMovableByWindowBackground = true
+        window.hasShadow = true
+        window.contentView = NSHostingView(rootView: view)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        historyWindow = window
     }
 
     // MARK: - Hotkeys
