@@ -6,6 +6,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var overlayWindow: OverlayWindow?
     var settingsWindow: NSWindow?
     var historyWindow: NSWindow?
+    var donateWindow: NSWindow?
     let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -14,7 +15,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupHotkeys()
 
         Task {
-            await appState.transcriber.loadModel()
+            await appState.transcriber.loadModel(appState.selectedLocalModel)
         }
     }
 
@@ -69,12 +70,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let view = SettingsView(hotkeys: HotkeyManager.shared, appState: appState, onClose: { [weak self] in
-            self?.settingsWindow?.orderOut(nil)
-        })
+        let view = SettingsView(
+            hotkeys: HotkeyManager.shared,
+            appState: appState,
+            onClose: { [weak self] in self?.settingsWindow?.orderOut(nil) },
+            onDonate: { [weak self] in self?.showDonate() }
+        )
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 460),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 620),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -122,6 +126,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         historyWindow = window
     }
 
+    // MARK: - Donate Window
+
+    func showDonate() {
+        if let existing = donateWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let view = DonateView(onClose: { [weak self] in
+            self?.donateWindow?.orderOut(nil)
+        })
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 440),
+            styleMask: [.borderless, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.level = .floating
+        window.isMovableByWindowBackground = true
+        window.hasShadow = true
+        window.contentView = NSHostingView(rootView: view)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        donateWindow = window
+    }
+
     // MARK: - Hotkeys
 
     private func setupHotkeys() {
@@ -140,8 +175,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Recording
 
     func startRecording() {
-        guard appState.modelReady else { return }
-        // Запомнить приложение с фокусом ДО показа overlay
+        guard appState.modelReady || appState.transcriptionProvider == .cloud else { return }
         OutputHandler.shared.rememberFocusedApp()
         appState.isRecording = true
         updateStatusIcon()
@@ -163,8 +197,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         updateStatusIcon()
         let language = appState.transcriptionLanguage
         let prompt = appState.promptEnabled ? appState.transcriptionPrompt : nil
+        let provider = appState.transcriptionProvider
+        let cloudProvider = appState.selectedCloudProvider
+
         Task {
-            let result = await appState.transcriber.transcribe(audio: audio, language: language, prompt: prompt)
+            let result: String?
+
+            if provider == .cloud {
+                result = await appState.cloudTranscriber.transcribe(
+                    audio: audio,
+                    provider: cloudProvider,
+                    language: language
+                )
+            } else {
+                result = await appState.transcriber.transcribe(
+                    audio: audio,
+                    language: language,
+                    prompt: prompt
+                )
+            }
+
             await MainActor.run {
                 appState.isTranscribing = false
                 self.updateStatusIcon()
@@ -181,7 +233,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func toggleVAD() {
         appState.isVADMode.toggle()
         if appState.isVADMode {
-            // Запомнить приложение при включении VAD
             OutputHandler.shared.rememberFocusedApp()
             appState.recorder.startVAD { [weak self] audio in
                 self?.transcribe(audio: audio)

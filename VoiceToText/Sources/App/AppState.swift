@@ -1,6 +1,15 @@
 import Foundation
 import Combine
 
+// MARK: - Провайдер транскрибации
+
+enum TranscriptionProvider: String {
+    case local = "local"
+    case cloud = "cloud"
+}
+
+// MARK: - AppState
+
 class AppState: ObservableObject {
     @Published var isRecording: Bool = false
     @Published var isTranscribing: Bool = false
@@ -24,19 +33,46 @@ class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(promptEnabled, forKey: "promptEnabled") }
     }
 
+    // Настройки модели
+    @Published var transcriptionProvider: TranscriptionProvider {
+        didSet { UserDefaults.standard.set(transcriptionProvider.rawValue, forKey: "transcriptionProvider") }
+    }
+    @Published var selectedLocalModel: LocalWhisperModel {
+        didSet {
+            UserDefaults.standard.set(selectedLocalModel.rawValue, forKey: "selectedLocalModel")
+        }
+    }
+    @Published var selectedCloudProvider: CloudProvider {
+        didSet { UserDefaults.standard.set(selectedCloudProvider.rawValue, forKey: "selectedCloudProvider") }
+    }
+
+    // Флаг — идёт ли смена модели
+    @Published var isModelSwitching: Bool = false
+
     let recorder = AudioRecorder()
     let transcriber = Transcriber()
+    let cloudTranscriber = CloudTranscriber()
 
     init() {
         self.transcriptionLanguage = UserDefaults.standard.string(forKey: "transcriptionLanguage") ?? "ru"
         self.transcriptionPrompt = UserDefaults.standard.string(forKey: "transcriptionPrompt") ?? "Текст может содержать технические термины на английском языке."
         self.promptEnabled = UserDefaults.standard.object(forKey: "promptEnabled") as? Bool ?? false
 
+        let providerRaw = UserDefaults.standard.string(forKey: "transcriptionProvider") ?? "local"
+        self.transcriptionProvider = TranscriptionProvider(rawValue: providerRaw) ?? .local
+
+        let modelRaw = UserDefaults.standard.string(forKey: "selectedLocalModel") ?? LocalWhisperModel.small.rawValue
+        self.selectedLocalModel = LocalWhisperModel(rawValue: modelRaw) ?? .small
+
+        let cloudRaw = UserDefaults.standard.string(forKey: "selectedCloudProvider") ?? CloudProvider.openai.rawValue
+        self.selectedCloudProvider = CloudProvider(rawValue: cloudRaw) ?? .openai
+
         transcriber.onReady = { [weak self] in
             DispatchQueue.main.async {
                 self?.modelReady = true
                 self?.modelLoading = false
                 self?.modelProgress = 1.0
+                self?.isModelSwitching = false
             }
         }
         transcriber.onProgress = { [weak self] progress, label in
@@ -60,7 +96,21 @@ class AppState: ObservableObject {
             history.removeLast()
         }
     }
+
+    /// Сменить локальную модель на лету
+    func switchLocalModel(to model: LocalWhisperModel) {
+        guard model != selectedLocalModel else { return }
+        selectedLocalModel = model
+        modelReady = false
+        isModelSwitching = true
+        modelLoading = true
+        Task {
+            await transcriber.switchModel(to: model)
+        }
+    }
 }
+
+// MARK: - TranscriptionEntry
 
 struct TranscriptionEntry: Identifiable {
     let id = UUID()
@@ -77,7 +127,7 @@ struct TranscriptionEntry: Identifiable {
 // MARK: - Языки Whisper
 
 struct WhisperLanguage: Identifiable, Hashable {
-    let id: String  // код языка
+    let id: String
     let name: String
 
     static let all: [WhisperLanguage] = [

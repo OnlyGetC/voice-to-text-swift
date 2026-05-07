@@ -3,15 +3,17 @@ import WhisperKit
 
 class Transcriber {
     private var whisperKit: WhisperKit?
+    private var currentModel: LocalWhisperModel = .small
     var onReady: (() -> Void)?
     var onProgress: ((Double, String) -> Void)?
 
-    func loadModel() async {
+    func loadModel(_ model: LocalWhisperModel = .small) async {
+        currentModel = model
         do {
             onProgress?(0.05, "Подготовка...")
 
             whisperKit = try await WhisperKit(
-                model: "whisper-small",
+                model: model.rawValue,
                 verbose: false,
                 logLevel: .none,
                 prewarm: false,
@@ -42,11 +44,17 @@ class Transcriber {
         }
     }
 
+    /// Сменить модель на лету (без перезапуска приложения)
+    func switchModel(to model: LocalWhisperModel) async {
+        whisperKit = nil
+        onProgress?(0.0, "Смена модели...")
+        await loadModel(model)
+    }
+
     func transcribe(audio: [Float], language: String = "ru", prompt: String? = nil) async -> String? {
         guard let whisperKit else { return nil }
         do {
             var options = DecodingOptions()
-            // "auto" — не указываем язык, Whisper определит сам
             if language != "auto" {
                 options.language = language
             }

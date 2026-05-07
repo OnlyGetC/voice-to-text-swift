@@ -13,7 +13,10 @@ let package = Package(
             dependencies: [
                 .product(name: "WhisperKit", package: "WhisperKit"),
             ],
-            path: "VoiceToText/Sources"
+            path: "VoiceToText/Sources",
+            resources: [
+                .process("cat.jpeg"),
+            ]
         ),
     ]
 )
