@@ -77,7 +77,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             onDonate: { [weak self] in self?.showDonate() }
         )
 
-        let window = NSWindow(
+        let window = KeyableWindow(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 620),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
@@ -108,7 +108,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.historyWindow?.orderOut(nil)
         })
 
-        let window = NSWindow(
+        let window = KeyableWindow(
             contentRect: NSRect(x: 0, y: 0, width: 340, height: 420),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
@@ -129,17 +129,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Donate Window
 
     func showDonate() {
-        if let existing = donateWindow, existing.isVisible {
+        if let existing = donateWindow {
             existing.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
-        let view = DonateView(onClose: { [weak self] in
-            self?.donateWindow?.orderOut(nil)
-        })
-
-        let window = NSWindow(
+        let window = KeyableWindow(
             contentRect: NSRect(x: 0, y: 0, width: 340, height: 440),
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
@@ -150,6 +146,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.level = .floating
         window.isMovableByWindowBackground = true
         window.hasShadow = true
+        window.acceptsMouseMovedEvents = true
+
+        let view = DonateView(onClose: { [weak window, weak self] in
+            window?.close()
+            self?.donateWindow = nil
+        })
+
         window.contentView = NSHostingView(rootView: view)
         window.center()
         window.makeKeyAndOrderFront(nil)

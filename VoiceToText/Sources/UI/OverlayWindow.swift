@@ -1,6 +1,12 @@
 import AppKit
 import SwiftUI
 
+// NSWindow-подкласс, который принимает фокус (borderless окна по умолчанию не принимают)
+class KeyableWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 class OverlayWindow: NSWindow {
     private let pillWidth: CGFloat = 340
     private let bottomMargin: CGFloat = 80
