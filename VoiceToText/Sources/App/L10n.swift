@@ -133,6 +133,15 @@ enum L10n {
     case interfaceTitle
     case interfaceLanguageLabel
 
+    // MARK: Update checker
+    case updateCheck
+    case updateChecking
+    case updateUpToDate
+    case updateAvailable
+    case updateDownload
+    case updateError
+    case updateCurrentVersion
+
     // MARK: Overlay
     case overlayStatusLoading
     case overlayStatusRecording
@@ -262,6 +271,15 @@ extension L10n {
         case .interfaceTitle:             return "Interface"
         case .interfaceLanguageLabel:     return "Language"
 
+        // Update checker
+        case .updateCheck:                return "Check for updates"
+        case .updateChecking:             return "Checking..."
+        case .updateUpToDate:             return "Up to date"
+        case .updateAvailable:            return "Update available"
+        case .updateDownload:             return "Download"
+        case .updateError:                return "Error"
+        case .updateCurrentVersion:       return "Version"
+
         // Overlay
         case .overlayStatusLoading:       return "Loading model..."
         case .overlayStatusRecording:     return "Recording"
@@ -388,6 +406,15 @@ extension L10n {
         // Interface section
         case .interfaceTitle:             return "Интерфейс"
         case .interfaceLanguageLabel:     return "Язык"
+
+        // Update checker
+        case .updateCheck:                return "Проверить обновления"
+        case .updateChecking:             return "Проверяем..."
+        case .updateUpToDate:             return "Актуальная версия"
+        case .updateAvailable:            return "Доступно обновление"
+        case .updateDownload:             return "Скачать"
+        case .updateError:                return "Ошибка"
+        case .updateCurrentVersion:       return "Версия"
 
         // Overlay
         case .overlayStatusLoading:       return "Загрузка модели..."

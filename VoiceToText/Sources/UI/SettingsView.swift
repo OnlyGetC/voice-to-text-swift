@@ -845,9 +845,13 @@ struct SettingsView: View {
 
     // MARK: Интерфейс
 
+    @ObservedObject private var updater = UpdateChecker.shared
+
     private var interfaceSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionTitle(t(.interfaceTitle), info: SettingsSection.interface_.info)
+
+            // Язык интерфейса
             HStack {
                 Text(t(.interfaceLanguageLabel))
                     .font(.system(size: 13, design: .rounded)).foregroundColor(.white.opacity(0.7))
@@ -862,6 +866,77 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.menu).frame(maxWidth: 160).colorScheme(.dark)
             }
+
+            Divider().background(Color.white.opacity(0.06))
+
+            // Версия + проверка обновлений
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(t(.updateCurrentVersion)) \(appVersion)")
+                        .font(.system(size: 13, design: .rounded))
+                        .foregroundColor(.white.opacity(0.7))
+                    updateStatusLabel
+                }
+                Spacer()
+                updateActionButton
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var updateStatusLabel: some View {
+        switch updater.state {
+        case .idle:
+            EmptyView()
+        case .checking:
+            Text(t(.updateChecking))
+                .font(.system(size: 11, design: .rounded))
+                .foregroundColor(.white.opacity(0.35))
+        case .upToDate:
+            Text(t(.updateUpToDate))
+                .font(.system(size: 11, design: .rounded))
+                .foregroundColor(.green.opacity(0.7))
+        case .available(let version, _):
+            Text("\(t(.updateAvailable)): v\(version)")
+                .font(.system(size: 11, design: .rounded))
+                .foregroundColor(.orange.opacity(0.9))
+        case .error(let msg):
+            Text("\(t(.updateError)): \(msg)")
+                .font(.system(size: 11, design: .rounded))
+                .foregroundColor(.red.opacity(0.7))
+                .lineLimit(1)
+        }
+    }
+
+    @ViewBuilder
+    private var updateActionButton: some View {
+        switch updater.state {
+        case .checking:
+            ProgressView()
+                .scaleEffect(0.6)
+                .frame(width: 60)
+        case .available(_, let url):
+            Button(t(.updateDownload)) {
+                updater.openReleasePage(url: url)
+            }
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundColor(.white)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(Color.orange.opacity(0.3))
+            .cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.5), lineWidth: 1))
+            .buttonStyle(.plain)
+        default:
+            Button(t(.updateCheck)) {
+                updater.check()
+            }
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundColor(.white.opacity(0.6))
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(Color.white.opacity(0.07))
+            .cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.1), lineWidth: 1))
+            .buttonStyle(.plain)
         }
     }
 
